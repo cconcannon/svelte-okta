@@ -1,35 +1,53 @@
 <script>
-	import { setContext } from "svelte";
 	import Login from "./components/Login.svelte";
 	import Registration from "./components/Registration.svelte";
-	import { authClient } from "./oktaAuth";
+	import { user, registrationInProgress } from "./stores";
+	import authClient from "./oktaAuth";
+import { onDestroy } from "svelte";
 
-	setContext("AUTH_CONTEXT", {
-		getAuthClient: () => authClient,
-	});
+	authClient.start();
+
+	onDestroy(() => {
+		authClient.stop();
+	})
+
+	function beginRegistration() {
+		$registrationInProgress = true;
+		authClient.idx.register();
+	}
+
+	function logout() {
+		authClient.signOut();
+	}
 </script>
 
 <main>
 	<h1>Okta & Svelte</h1>
-	<p>
-		Visit the <a href="https://svelte.dev/tutorial">Svelte tutorial</a> to learn
-		how to build Svelte apps.
-	</p>
-	<!-- <Login/> -->
-	<Registration/>
+
+	{#if $user.loggedIn}
+		<h2>Welcome, {$user.name}!</h2>
+		<button on:click|preventDefault={logout}>Log Out</button>
+	{:else}
+		{#if $registrationInProgress}
+			<Registration/>
+		{:else}
+			<Login/>
+
+			<div>
+				<a href="/" on:click|preventDefault={beginRegistration}>Register with Okta</a>
+			</div>
+		{/if}
+	{/if}
 </main>
 
 <style>
 	main {
 		text-align: center;
-		padding: 1em;
 		max-width: 240px;
 		margin: 0 auto;
 	}
 
 	h1 {
-		color: #ff3e00;
-		text-transform: uppercase;
 		font-size: 4em;
 		font-weight: 100;
 	}

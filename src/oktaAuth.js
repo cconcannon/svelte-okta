@@ -1,15 +1,16 @@
 import { OktaAuth } from "@okta/okta-auth-js";
 
 const oktaConfig = {
-    issuer: "https://oie-1918532.oktapreview.com/oauth2/default",
-    clientId: "0oa3gx4qjzcLNoqWa1d7",
+    issuer: "https://dev-96267728.okta.com/oauth2/default",
+    clientId: "0oa4qm5rzvCU7fvwz5d7",
     redirectUri: "http://localhost:8080",
-    scopes: ["openid", "profile"],
+    scopes: ["openid", "profile", "email"],
+    pkce: true,
     tokenManager: {
-        storage: "sessionStorage"
+        storage: "localStorage"
     }
 }
 
 const authClient = new OktaAuth(oktaConfig);
 
-export { authClient };
+export default authClient;

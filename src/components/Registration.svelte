@@ -1,153 +1,147 @@
 <script>
-    import { getContext } from "svelte";
+    import { onMount } from "svelte";
+    import { IdxStatus } from "@okta/okta-auth-js";
+    import { registrationInProgress } from "../stores";
+    import authClient from "../oktaAuth";
 
-    const authContext = getContext("AUTH_CONTEXT");
-    const authClient = authContext.getAuthClient();
+    let nextStepInputs = [];
+    let nextStepValues = {};
 
-    let verificationCode = "";
+    onMount(() => {
+        beginRegistration();
+    });
 
-    function register() {
-        const user = randomUser();
-        console.log(user);
-
-        authClient.idx
-            .register({
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-                username: user.email,
-                authenticators: ["okta_password", "okta_email"],
-            })
-            .then((result) => {
-                console.log(result);
-                submitPassword();
-            });
-
-        // need nextStep.authenticator.id
-        // const {
-        //     status2,
-        //     nextStep2
-        // } = await authClient.idx.proceed({
-        //     // authenticator: nextStep1.authenticator.name,
-        //     // id: nextStep1.authenticator.id
-        // });
-        // console.log(status2);
-        // console.log(nextStep2);
-        // // submit password
-        // const {
-        //     status3, // IdxStatus.SUCCESS
-        //     tokens,
-        // } = await authClient.idx.proceed({ password: "C0nc@nn0n" });
-
-        // console.log(status3);
-        // console.log(tokens);
-    }
-
-    async function submitPassword() {
-        authClient.idx
-            .proceed({
-                password: "C0nc@nn0n",
-            })
-            .then((result) => {
-                console.log(result);
-            });
-    }
-
-    function activateAccount() {
-        authClient.idx.register({
-            activationToken: "xxxxx",
-            authenticator: "okta_password",
-            password: "xxx",
+    function beginRegistration() {
+        authClient.idx.register().then((result) => {
+            handleIdxResponse(result);
         });
     }
 
-    function verifyEmail() {
-        authClient.idx
-            .proceed({
-                authenticator: "okta_email",
-            })
-            .then((result) => console.log(result));
+    async function handleIdxResponse(idxResponse) {
+        switch (idxResponse.status) {
+            case IdxStatus.PENDING:
+                await handleNextStep(idxResponse.nextStep);
+                break;
+            case IdxStatus.SUCCESS:
+                authClient.tokenManager.setTokens(idxResponse.tokens);
+                $registrationInProgress = false;
+                break;
+            default:
+                console.log(`IDX Transaction Status: ${idxResponse.status}`);
+        }
     }
 
-    function submitVerificationCode() {
-        authClient.idx
-            .proceed({
-                authenticatorCode: verificationCode,
-            })
-            .then((result) => console.log(result));
+    async function handleNextStep(nextStep) {
+        switch (nextStep.name) {
+            case "enroll-profile":
+                handleEnroll(nextStep);
+                break;
+            case "select-authenticator-enroll":
+                await handleSelect(nextStep);
+                break;
+            case "enroll-authenticator":
+                handleEnroll(nextStep);
+                break;
+            default:
+                console.log(`nextStep unknown: ${JSON.stringify(nextStep)}`);
+                authClient.idx.cancel();
+        }
     }
 
-    function canProceed() {
-        const answer = authClient.idx.canProceed();
-        alert(answer);
-    }
-
-    function skip() {
-        authClient.idx.proceed().then((result) => console.log(result));
-    }
-
-    function cancel() {
-        authClient.idx.cancel().then((result) => console.log(result));
-    }
-
-    function useEmailAsFactor() {
-        authClient.idx.proceed({
-            authenticator: "email",
+    function handleEnroll(nextStep) {
+        nextStepValues = {};
+        nextStepInputs = nextStep.inputs;
+        nextStepInputs.forEach((input) => {
+            if (input.type === "string") {
+                nextStepValues[input.name] = "";
+            }
         });
     }
 
-    function randomUser() {
-        let randomN = Math.floor(Math.random() * 10000);
-        let emailAddress = "User." + randomN + "@concokta.com";
-        const user = {
-            firstName: "User",
-            lastName: randomN,
-            email: emailAddress,
-        };
-        return user;
+    async function handleSelect(nextStep) {
+        // removing this check can cause an infinite loop
+        // when other authenticators are configured
+        if (
+            nextStep.inputs.options &&
+            nextStep.inputs.options.label != "Password"
+        ) {
+            return;
+        }
+        await authClient.idx
+            .proceed({
+                authenticator: "okta_password",
+            })
+            .then((result) => {
+                handleIdxResponse(result);
+            });
+    }
+
+    async function handleSubmit() {
+        const transactionResult = await authClient.idx.proceed(nextStepValues);
+        console.log(`transactionResult: ${JSON.stringify(transactionResult)}`);
+        await handleIdxResponse(transactionResult);
+    }
+
+    async function cancel() {
+        $registrationInProgress = false;
+        await authClient.idx.cancel();
     }
 </script>
 
-<h2>Registration Component</h2>
+<h2>Register</h2>
 
-<div>
-    <button on:click={register}>Register with Okta</button>
+{#if nextStepInputs.length > 0}
+    <form>
+        {#each nextStepInputs as i}
+            <label for="{i.name}-input">{i.label}</label>
+            {#if i.secret}
+                <input
+                    type="password"
+                    id="{i.name}-input"
+                    bind:value={nextStepValues[i.name]}
+                />
+            {:else}
+                <input
+                    type="text"
+                    id="{i.name}-input"
+                    bind:value={nextStepValues[i.name]}
+                />
+            {/if}
+        {/each}
+        <button type="submit" on:click|preventDefault={handleSubmit}
+            >Submit</button
+        >
+    </form>
+{:else}
+<div id="loader-container">
+    <div class="loader" />
 </div>
-<div>
-    <button on:click={verifyEmail}>Verify Email</button>
-</div>
+{/if}
 
-<form id="email-verification-form">
-    <label for="verification-code-input">Verification Code:</label>
-    <input
-        type="text"
-        id="verification-code-input"
-        class="form-input"
-        bind:value={verificationCode}
-    />
-    <button
-        type="submit"
-        class="form-input"
-        on:click|preventDefault={submitVerificationCode}>Submit</button
-    >
-</form>
-<div>
-    <button on:click={useEmailAsFactor}>Use Email as Factor</button>
-</div>
-<div>
-    <button on:click={canProceed}>Can Proceed?</button>
-</div>
-<div>
-    <button on:click={skip}>Skip</button>
-</div>
-<div>
-    <button on:click={cancel}>Cancel</button>
-</div>
+<button on:click={cancel}>Cancel</button>
 
 <style>
-    #email-verification-form {
+    form, #loader-container {
         display: flex;
         flex-direction: column;
         align-items: center;
+    }
+
+    .loader {
+        border: 16px solid #f3f3f3; /* Light grey */
+        border-top: 16px solid #3498db; /* Blue */
+        border-radius: 50%;
+        width: 120px;
+        height: 120px;
+        animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
     }
 </style>

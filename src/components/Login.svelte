@@ -1,8 +1,6 @@
 <script>
-	import { getContext } from "svelte";
-
-	const authContext = getContext("AUTH_CONTEXT");
-	const authClient = authContext.getAuthClient();
+	import { IdxStatus } from "@okta/okta-auth-js";
+	import authClient from "../oktaAuth";
 
 	let credentials = {
 		username: "",
@@ -10,30 +8,22 @@
 	};
 
 	async function login() {
-		try {
-			console.log(
-				`Logging in with username: ${credentials.username} and password: ${credentials.password}`
-			);
-			authClient.idx
-				.authenticate({
-					username: credentials.username,
-					password: credentials.password,
-				})
-				.then(
-					(res) => {
-						console.log(res);
-					},
-					(rej) => {
-						console.log(rej);
-					}
-				);
-		} catch (e) {
-			console.log(e);
+		const transaction = await authClient.idx.authenticate({
+			username: credentials.username,
+			password: credentials.password,
+		});
+
+		switch (transaction.status) {
+			case IdxStatus.SUCCESS:
+				authClient.tokenManager.setTokens(transaction.tokens);
+				break;
+			default:
+				console.log(transaction);
 		}
 	}
 </script>
 
-<h2>Login Component</h2>
+<h2>Log In</h2>
 
 <form id="login-form">
 	<label for="username-input">Username (email)</label>
@@ -53,9 +43,6 @@
 		>Submit</button
 	>
 </form>
-
-<hr />
-
 <style>
 	#login-form {
 		display: flex;
