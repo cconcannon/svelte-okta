@@ -3,13 +3,13 @@
 	import Registration from "./components/Registration.svelte";
 	import { user, registrationInProgress } from "./stores";
 	import authClient from "./oktaAuth";
-import { onDestroy } from "svelte";
+	import { onDestroy } from "svelte";
 
 	authClient.start();
 
 	onDestroy(() => {
 		authClient.stop();
-	})
+	});
 
 	function beginRegistration() {
 		$registrationInProgress = true;
@@ -27,16 +27,16 @@ import { onDestroy } from "svelte";
 	{#if $user.loggedIn}
 		<h2>Welcome, {$user.name}!</h2>
 		<button on:click|preventDefault={logout}>Log Out</button>
+	{:else if $registrationInProgress}
+		<Registration />
 	{:else}
-		{#if $registrationInProgress}
-			<Registration/>
-		{:else}
-			<Login/>
+		<Login />
 
-			<div>
-				<a href="/" on:click|preventDefault={beginRegistration}>Register with Okta</a>
-			</div>
-		{/if}
+		<div>
+			<a href="/" on:click|preventDefault={beginRegistration}
+				>Register with Okta</a
+			>
+		</div>
 	{/if}
 </main>
 

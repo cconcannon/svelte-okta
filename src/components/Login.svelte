@@ -18,7 +18,7 @@
 				authClient.tokenManager.setTokens(transaction.tokens);
 				break;
 			default:
-				console.log(transaction);
+				console.error(transaction);
 		}
 	}
 </script>
@@ -43,6 +43,7 @@
 		>Submit</button
 	>
 </form>
+
 <style>
 	#login-form {
 		display: flex;

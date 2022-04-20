@@ -1,6 +1,6 @@
 <script>
     import { onMount } from "svelte";
-    import { IdxStatus } from "@okta/okta-auth-js";
+    import { IdxStatus, AuthenticatorKey } from "@okta/okta-auth-js";
     import { registrationInProgress } from "../stores";
     import authClient from "../oktaAuth";
 
@@ -27,7 +27,7 @@
                 $registrationInProgress = false;
                 break;
             default:
-                console.log(`IDX Transaction Status: ${idxResponse.status}`);
+                console.error(`IDX Transaction Status: ${idxResponse.status}`);
         }
     }
 
@@ -43,7 +43,7 @@
                 handleEnroll(nextStep);
                 break;
             default:
-                console.log(`nextStep unknown: ${JSON.stringify(nextStep)}`);
+                console.error(`nextStep unknown: ${JSON.stringify(nextStep)}`);
                 authClient.idx.cancel();
         }
     }
@@ -59,27 +59,30 @@
     }
 
     async function handleSelect(nextStep) {
-        // removing this check can cause an infinite loop
-        // when other authenticators are configured
-        if (
-            nextStep.inputs.options &&
-            nextStep.inputs.options.label != "Password"
-        ) {
-            return;
+        if (nextStep.options.length > 0) {
+            switch (nextStep.options[0].label) {
+                case "Password":
+                    await proceed({
+                        authenticator: AuthenticatorKey.OKTA_PASSWORD,
+                    });
+                    break;
+                case "Security Question":
+                    console.error(`no handler for this nextStep! ${nextStep}`);
+                default:
+                    cancel();
+            }
         }
-        await authClient.idx
-            .proceed({
-                authenticator: "okta_password",
-            })
-            .then((result) => {
-                handleIdxResponse(result);
-            });
     }
 
     async function handleSubmit() {
         const transactionResult = await authClient.idx.proceed(nextStepValues);
-        console.log(`transactionResult: ${JSON.stringify(transactionResult)}`);
         await handleIdxResponse(transactionResult);
+    }
+
+    async function proceed(options) {
+        await authClient.idx
+            .proceed(options)
+            .then((result) => handleIdxResponse(result));
     }
 
     async function cancel() {
@@ -113,15 +116,16 @@
         >
     </form>
 {:else}
-<div id="loader-container">
-    <div class="loader" />
-</div>
+    <div id="loader-container">
+        <div class="loader" />
+    </div>
 {/if}
 
 <button on:click={cancel}>Cancel</button>
 
 <style>
-    form, #loader-container {
+    form,
+    #loader-container {
         display: flex;
         flex-direction: column;
         align-items: center;
